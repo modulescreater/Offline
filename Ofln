@@ -1,0 +1,51 @@
+import asyncio
+from hikkatl import loader, utils
+from hikkatl.tl.functions.account import UpdateStatus
+
+@loader.tds
+class EternalOfflineMod(loader.Module):
+    """Модуль для поддержания статуса 'В сети' в положении 'Был недавно'"""
+    strings = {"name": "EternalOffline"}
+
+    async def client_ready(self, client, db):
+        self.client = client
+        self.db = db
+        self.active = self.db.get("EternalOffline", "active", False)
+        
+        # Запускаем фоновую задачу, если модуль был включен до перезапуска
+        if self.active:
+            self.task = asyncio.create_task(self._offline_loop())
+
+    async def _offline_loop(self):
+        while self.active:
+            try:
+                await self.client(UpdateStatus(offline=True))
+            except Exception:
+                pass
+            # Отправляем запрос каждые 4 секунды, чтобы перебивать автоматический онлайн
+            await asyncio.sleep(4)
+
+    @loader.command()
+    async def eoffcmd(self, message):
+        """Включить вечный оффлайн"""
+        if self.db.get("EternalOffline", "active", False):
+            return await utils.answer(message, "⚠️ Режим уже включен.")
+
+        self.db.set("EternalOffline", "active", True)
+        self.active = True
+        self.task = asyncio.create_task(self._offline_loop())
+        await utils.answer(message, "✅ **Вечный оффлайн включён.** Текущий статус зафиксирован.")
+
+    @loader.command()
+    async def eoncmd(self, message):
+        """Выключить вечный оффлайн"""
+        if not self.db.get("EternalOffline", "active", False):
+            return await utils.answer(message, "⚠️ Режим и так выключен.")
+
+        self.db.set("EternalOffline", "active", False)
+        self.active = False
+        if hasattr(self, "task"):
+            self.task.cancel()
+        
+        await self.client(UpdateStatus(offline=False))
+        await utils.answer(message, "✅ **Обычный онлайн включён.**")
