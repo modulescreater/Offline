@@ -1,0 +1,55 @@
+import asyncio
+import sys
+
+# Динамически вытаскиваем модули из системы, чтобы скрыть имя hikkatl
+main_framework = sys.modules.get("hikkatl") or sys.modules.get("hikka")
+if main_framework:
+    loader = sys.modules.get(f"{main_framework.__name__}.loader")
+    utils = sys.modules.get(f"{main_framework.__name__}.utils")
+    # Динамический импорт функции статуса
+    account_functions = __import__(f"{main_framework.__name__}.tl.functions.account", fromlist=["UpdateStatus"])
+    UpdateStatus = account_functions.UpdateStatus
+else:
+    # Запасной вариант для старых версий форка
+    import loader
+    import utils
+    from telethon.tl.functions.account import UpdateStatus
+
+@loader.tds
+class SilentOfflineMod(loader.Module):
+    strings = {"name": "PureOffline"}
+
+    async def client_ready(self, client, db):
+        self.client = client
+        self.db = db
+        self.active = self.db.get("PureOffline", "active", False)
+        if self.active:
+            self.task = asyncio.create_task(self._offline_loop())
+
+    async def _offline_loop(self):
+        while self.active:
+            try:
+                await self.client(UpdateStatus(offline=True))
+            except Exception:
+                pass
+            await asyncio.sleep(4)
+
+    @loader.command()
+    async def poffcmd(self, message):
+        if self.db.get("PureOffline", "active", False):
+            return await utils.answer(message, "⚠️ Уже включен.")
+        self.db.set("PureOffline", "active", True)
+        self.active = True
+        self.task = asyncio.create_task(self._offline_loop())
+        await utils.answer(message, "✅ **Оффлайн включён.**")
+
+    @loader.command()
+    async def poncmd(self, message):
+        if not self.db.get("PureOffline", "active", False):
+            return await utils.answer(message, "⚠️ Уже выключен.")
+        self.db.set("PureOffline", "active", False)
+        self.active = False
+        if hasattr(self, "task"):
+            self.task.cancel()
+        await self.client(UpdateStatus(offline=False))
+        await utils.answer(message, "✅ **Обычный онлайн возвращен.**")
