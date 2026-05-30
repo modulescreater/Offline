@@ -1,5 +1,4 @@
 # meta developer: @frozentotem
-# meta dependencies: herokutl
 
 import asyncio
 from hikkatl import loader, utils
@@ -15,7 +14,7 @@ class EternalOfflineMod(loader.Module):
         self.db = db
         self.active = self.db.get("EternalOffline", "active", False)
         
-        # Запускаем фоновую задачу, если модуль был включен до перезапуска
+        # Запускаем задачу, если модуль был включен до перезапуска
         if self.active:
             self.task = asyncio.create_task(self._offline_loop())
 
@@ -25,7 +24,7 @@ class EternalOfflineMod(loader.Module):
                 await self.client(UpdateStatus(offline=True))
             except Exception:
                 pass
-            # Отправляем запрос каждые 4 секунды, чтобы перебивать автоматический онлайн
+            # Держим интервал 4 секунды, чтобы не ловить флудвейт
             await asyncio.sleep(4)
 
     @loader.command()
@@ -37,7 +36,7 @@ class EternalOfflineMod(loader.Module):
         self.db.set("EternalOffline", "active", True)
         self.active = True
         self.task = asyncio.create_task(self._offline_loop())
-        await utils.answer(message, "✅ **Вечный оффлайн включён.** Текущий статус зафиксирован.")
+        await utils.answer(message, "✅ **Вечный оффлайн включён.**")
 
     @loader.command()
     async def eoncmd(self, message):
