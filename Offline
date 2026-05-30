@@ -2,50 +2,58 @@ import asyncio
 from .. import loader, utils
 
 @loader.tds
-class PureOfflineMod(loader.Module):
-    """Модуль оффлайна без ложных импортов"""
+class HighFrequencyOfflineMod(loader.Module):
+    """Модуль агрессивного вечного оффлайна"""
     strings = {"name": "PureOffline"}
 
     async def client_ready(self, client, db):
         self.client = client
         self.db = db
         self.active = self.db.get("PureOffline", "active", False)
+        self.task = None
         if self.active:
             self.task = asyncio.create_task(self._offline_loop())
 
     async def _offline_loop(self):
+        # Подгружаем функцию один раз, чтобы не тратить время в цикле
+        try:
+            UpdateStatus = __import__("telethon.tl.functions.account", fromlist=["UpdateStatus"]).UpdateStatus
+        except Exception:
+            try:
+                UpdateStatus = __import__("hikkatl.tl.functions.account", fromlist=["UpdateStatus"]).UpdateStatus
+            except Exception:
+                return
+
         while self.active:
             try:
-                # Вызываем обновление статуса напрямую через хэндл клинета,
-                # чтобы установщик форка не парсил путь импорта
-                await self.client.__call__(
-                    __import__("telethon.tl.functions.account", fromlist=["UpdateStatus"]).UpdateStatus(offline=True)
-                )
+                # Спамим запросом в Телеграм каждую секунду
+                await self.client.__call__(UpdateStatus(offline=True))
             except Exception:
                 pass
-            await asyncio.sleep(4)
+            # Интервал 1 секунда, чтобы официальный клиент не успевал обновить онлайн
+            await asyncio.sleep(1)
 
-    @loader.command(ru_doc="Включить вечный оффлайн")
+    @loader.command(ru_doc="Включить жесткий оффлайн")
     async def poff(self, message):
         if self.db.get("PureOffline", "active", False):
-            return await utils.answer(message, "⚠️ Уже включен.")
+            return await utils.answer(message, "⚠️ Уже работает.")
         self.db.set("PureOffline", "active", True)
         self.active = True
+        if self.task:
+            self.task.cancel()
         self.task = asyncio.create_task(self._offline_loop())
-        await utils.answer(message, "✅ **Оффлайн включён.**")
+        await utils.answer(message, "✅ **Жесткий оффлайн запущен (интервал 1с).**")
 
-    @loader.command(ru_doc="Выключить вечный оффлайн")
+    @loader.command(ru_doc="Выключить оффлайн")
     async def pon(self, message):
-        if not self.db.get("PureOffline", "active", False):
-            return await utils.answer(message, "⚠️ Уже выключен.")
         self.db.set("PureOffline", "active", False)
         self.active = False
-        if hasattr(self, "task"):
+        if self.task:
             self.task.cancel()
+            self.task = None
         try:
-            await self.client.__call__(
-                __import__("telethon.tl.functions.account", fromlist=["UpdateStatus"]).UpdateStatus(offline=False)
-            )
+            UpdateStatus = __import__("telethon.tl.functions.account", fromlist=["UpdateStatus"]).UpdateStatus
+            await self.client.__call__(UpdateStatus(offline=False))
         except Exception:
             pass
-        await utils.answer(message, "✅ **Обычный онлайн возвращен.**")
+        await utils.answer(message, "✅ **Обычный статус сети возвращен.**")
