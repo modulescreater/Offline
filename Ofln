@@ -1,3 +1,6 @@
+# meta developer: @frozentotem
+# meta dependencies: herokutl
+
 import asyncio
 from hikkatl import loader, utils
 from hikkatl.tl.functions.account import UpdateStatus
